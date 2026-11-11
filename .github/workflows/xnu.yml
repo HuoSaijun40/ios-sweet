@@ -48,10 +48,22 @@ jobs:
           git init -q dxb
           git -C dxb fetch -q --depth 1 "$DXB_REPO" "$DXB_SHA"
           git -C dxb checkout -q FETCH_HEAD
-          # 12.5-14.3 use the top-level patches dir; ours go next to blacktop's
-          # stage-3 series is .patch only; glob must not fail when *.sh is absent
-          cp xnu/patches/*.patch dxb/patches/
+          # Copy our series over. Two rules, both learned the hard way:
+          #  * skip any *-sweet-* patch still sitting in the fork -- otherwise
+          #    both it and our *-sagit-* version apply, the second one wins, and
+          #    the build reports "Unsupported CURRENT_MACHINE_CONFIG SAGIT".
+          #  * clear any pre-existing file with the same 4-digit prefix first,
+          #    so a stale/same-numbered patch can never be applied twice.
+          for f in xnu/patches/*.patch; do
+            b=$(basename "$f")
+            case "$b" in *-sweet-*) echo "ignoring stale $b"; continue;; esac
+            n=$(printf '%s' "$b" | cut -c1-4)
+            find dxb/patches -maxdepth 1 -name "${n}-*" -delete 2>/dev/null || true
+            cp "$f" dxb/patches/
+          done
           cp xnu/patches/*.sh dxb/patches/ 2>/dev/null || true
+          dup=$(ls dxb/patches/*.patch | xargs -n1 basename | cut -c1-4 | sort | uniq -d)
+          if [ -n "$dup" ]; then echo "::error::duplicate patch numbers in dxb/patches: $dup"; exit 1; fi
           # libfirehose_kernel is built arm64e-only; the SAGIT kernel is plain arm64 (Kryo 280, no PAC)
           sed -i '' 's/ARCHS="x86_64 arm64e" VALID_ARCHS="x86_64 arm64e"/ARCHS="x86_64 arm64e arm64" VALID_ARCHS="x86_64 arm64e arm64"/' dxb/build.sh
           grep -c 'VALID_ARCHS="x86_64 arm64e arm64"' dxb/build.sh
