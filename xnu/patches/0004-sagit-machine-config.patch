@@ -218,7 +218,7 @@ new file mode 100644
 index 0000000..a044ad0
 --- /dev/null
 +++ b/pexpert/pexpert/arm64/SAGIT.h
-@@ -0,0 +1,74 @@
+@@ -0,0 +1,73 @@
 +/*
 + * Board config for the Redmi Note 10 Pro ("sagit", Qualcomm SM7150 /
 + * Snapdragon 732G): Kryo 470 = Cortex-A73 + Cortex-A53, ARMv8.2, no PAC.
@@ -246,7 +246,6 @@ index 0000000..a044ad0
 +#define __ARM_DEBUG__             7
 +#define __ARM_ENABLE_SWAP__       1
 +#define __ARM_V8_CRYPTO_EXTENSIONS__ 1
-+#define __ARM_16K_PG__            1
 +
 +#define HAS_GIC_V3                1
 +
