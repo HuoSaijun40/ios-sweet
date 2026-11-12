@@ -6,8 +6,23 @@ diff --git a/iokit/DriverKit/IORPC.h b/iokit/DriverKit/IORPC.h
  	uint32_t           sendSize;
  	uint32_t           replySize;
 +#ifdef KERNEL
-+	/* Backported from xnu-12377: Xcode 16+/26 iig emits IORPC initialisers
-+	 * that name this member. Unused by 8796's IOKit, but must exist. */
++	/* Backported from xnu-12377. Xcode 16+/26's iig emits IORPC initialisers
++	 * that name this member; 8796's IOKit never reads it. */
++	IORPCMessage     * kernelContent;
++#endif /* KERNEL */
+ };
+ typedef struct IORPC IORPC;
+ 
+diff --git a/iokit/IOKit/IORPC.h b/iokit/IOKit/IORPC.h
+--- a/iokit/IOKit/IORPC.h
++++ b/iokit/IOKit/IORPC.h
+@@ -224,6 +224,11 @@
+ 	IORPCMessageMach * reply;
+ 	uint32_t           sendSize;
+ 	uint32_t           replySize;
++#ifdef KERNEL
++	/* Backported from xnu-12377. Xcode 16+/26's iig emits IORPC initialisers
++	 * that name this member; 8796's IOKit never reads it. */
 +	IORPCMessage     * kernelContent;
 +#endif /* KERNEL */
  };
