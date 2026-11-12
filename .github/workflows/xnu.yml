@@ -18,8 +18,15 @@ on:
         description: xnu MACHINE_CONFIG (SAGIT = Xiaomi Mi 6 / msm8998)
         default: SAGIT
       keep_going:
-        description: make -k (collect all compile errors in one run)
-        default: "true"
+        description: >-
+          make -k: keep compiling after the first error. Off by default so a
+          failure stops early instead of dumping tens of MB of warnings.
+        default: "false"
+      upload_buildtree:
+        description: >-
+          upload the patched source tree tarball (large, ~100 MB; only needed
+          to replay a single compile command locally)
+        default: "false"
   push:
     branches: [main]
     paths:
@@ -128,12 +135,54 @@ jobs:
       - name: Build
         working-directory: dxb
         env:
-          # keep going after errors so one run reports every compile failure
-          MAKEFLAGS: ${{ inputs.keep_going == 'false' && '' || '-k' }}
-        run: bash build.sh
+          # -s silences make's recipe echo (that alone is tens of thousands of
+          # lines); -k only when explicitly asked, since it makes a failed run
+          # compile the rest of the tree and dump every warning.
+          MAKEFLAGS: ${{ inputs.keep_going == 'true' && '-s -k' || '-s' }}
+        run: |
+          LOG="${RUNNER_TEMP}/build.log"
+          rc=0
+          bash build.sh >"$LOG" 2>&1 || rc=$?
+          echo "build.sh exit code: $rc"
+          echo "full compiler log: $(wc -l < "$LOG") lines, $(du -h "$LOG" | cut -f1) (not shown)"
+
+          # Only diagnostics go into the job log and into the small artifact;
+          # the raw log stays on the runner. Grep -A gives the source context
+          # that a bare "error:" line loses.
+          DIAG="${RUNNER_TEMP}/diagnostics.txt"
+          {
+            echo "# build.sh exit $rc"
+            echo "# $(date -u +%FT%TZ)"
+            echo
+            if grep -qE 'XNU Build Done' "$LOG"; then echo "RESULT: SUCCESS"; else echo "RESULT: FAILURE"; fi
+            echo
+            echo "## error index"
+            IDX=$(grep -nE 'error:|fatal error|Error [0-9]+|\*\*\* \[|undefined (symbol|reference)|static assertion|Unsupported' "$LOG" | head -40 || true)
+            if [ -n "$IDX" ]; then echo "$IDX"; else echo "(no error-like lines in the build output)"; fi
+            echo
+            echo "## error context (first few, with source lines)"
+            grep -B6 -A12 -m6 -E 'error:|fatal error|\*\*\* \[|undefined (symbol|reference)|static assertion|Unsupported' "$LOG" \
+              | head -200 || true
+            echo
+            echo "## last 20 lines"
+            tail -20 "$LOG"
+          } > "$DIAG"
+          echo "diagnostics: $(wc -l < "$DIAG") lines, $(wc -c < "$DIAG") bytes"
+          cat "$DIAG"
+          exit $rc
+
+      - name: Upload build diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-diagnostics
+          path: ${{ runner.temp }}/diagnostics.txt
+          if-no-files-found: warn
 
       - name: Package build tree for local compiles
-        if: always()
+        # Off by default: the tarball is large and only useful for replaying a
+        # single compile command locally. Enable with the upload_buildtree input.
+        if: always() && inputs.upload_buildtree == 'true'
         run: |
           # Generated headers, config option headers, mig output and the patched
           # source: enough to re-run any single compile command from the log locally.
@@ -148,7 +197,7 @@ jobs:
           ls -la buildtree.tgz
 
       - uses: actions/upload-artifact@v4
-        if: always()
+        if: always() && inputs.upload_buildtree == 'true'
         with:
           name: xnu-buildtree
           path: buildtree.tgz
