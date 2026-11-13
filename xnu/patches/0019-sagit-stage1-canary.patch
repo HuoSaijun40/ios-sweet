@@ -6,9 +6,9 @@ diff --git a/osfmk/arm64/start.s b/osfmk/arm64/start.s
  	isb		sy
  
 +#if defined(SAGIT)
-+	/* Stage 1: reached only if the MMU/cache enable above survived. The splash
-+	 * framebuffer is mapped V=P Normal-NC by the bootstrap tables, so the same
-+	 * identity address still works here. x0-x5 are scratch at this point. */
++	/* Stage 1: only reached if the MMU/cache enable above survived. 0021
++	 * gives the framebuffer a real identity mapping at 0x9d400000, so this
++	 * store is a valid probe (before 0021 it faulted on an unmapped VA). */
 +	MOV64	x0, (0x9d400000 + 1840 * 4320)
 +	mov		w1, #-1
 +	mov		x2, #32
