@@ -1,19 +1,19 @@
 diff --git a/osfmk/arm64/start.s b/osfmk/arm64/start.s
 --- a/osfmk/arm64/start.s
 +++ b/osfmk/arm64/start.s
-@@ -745,6 +745,39 @@
+@@ -781,6 +781,39 @@
  	MSR_SCTLR_EL1_X0
  	isb		sy
  
 +#if defined(SAGIT)
 +	/*
 +	 * Stage 1: reached only if the MMU/cache enable survived. Writes to plain
-+	 * RAM (not the framebuffer) and also records LR -- the address this code
-+	 * will eventually `ret` to -- so the next boot's shim can report both.
++	 * RAM (not the framebuffer), and records LR -- the address this code will
++	 * eventually `ret` to -- so the next boot's shim can report both.
 +	 *
-+	 *   PA 0x1a0008000 : 0xffffffff      (stage 1 ran)
-+	 *   PA 0x1a0000008 : 2               (reached the end of this block)
-+	 *   PA 0x1a0000010 : LR value
++	 *   PA 0x1a0008000 : 0xffffffff   stage 1 ran
++	 *   PA 0x1a0000008 : 2            end of this block reached
++	 *   PA 0x1a0000010 : LR value     where start.s will jump next
 +	 */
 +	MOV64	x0, 0x1A0008000
 +	mov		w1, #-1
@@ -38,6 +38,6 @@ diff --git a/osfmk/arm64/start.s b/osfmk/arm64/start.s
 +	dsb		sy
 +#endif /* SAGIT */
 +
- #if !VMAPPLE
+ #if !VMAPPLE && !defined(SAGIT)
  	MOV64   x1, SCTLR_EL1_DEFAULT
  	cmp		x0, x1
