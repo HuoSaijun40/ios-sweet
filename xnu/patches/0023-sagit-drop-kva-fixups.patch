@@ -1,30 +1,62 @@
 diff --git a/osfmk/arm64/start.s b/osfmk/arm64/start.s
 --- a/osfmk/arm64/start.s
 +++ b/osfmk/arm64/start.s
-@@ -341,9 +341,13 @@
- 	msr		SPSel, #0
+@@ -504,8 +504,9 @@
+ 	// Set up exception stack pointer
+ 	adrp	x0, EXT(excepstack_top)@page		// Load top of exception stack
+ 	add		x0, x0, EXT(excepstack_top)@pageoff
+-	add		x0, x0, x22							// Convert to KVA
+-	sub		x0, x0, x23
++	/* SAGIT: no KVA fixup -- the value is already a virtual address;
++	 * the upstream +virtBase-physBase is a no-op only when iBoot
++	 * passes virtBase == physBase, which this port does not. */
+ 
+ 	// Set SP_EL1 to exception stack
+ #if defined(KERNEL_INTEGRITY_KTRR) || defined(KERNEL_INTEGRITY_CTRR)
+@@ -519,16 +520,18 @@
+ 	// Set up interrupt stack pointer
+ 	adrp	x0, EXT(intstack_top)@page			// Load top of irq stack
+ 	add		x0, x0, EXT(intstack_top)@pageoff
+-	add		x0, x0, x22							// Convert to KVA
+-	sub		x0, x0, x23
++	/* SAGIT: no KVA fixup -- the value is already a virtual address;
++	 * the upstream +virtBase-physBase is a no-op only when iBoot
++	 * passes virtBase == physBase, which this port does not. */
+ 	msr		SPSel, #0							// Set SP_EL0 to interrupt stack
  	mov		sp, x0
  
--	// Convert lr to KVA
--	add		lr, lr, x22
+ 	// Load address to the C init routine into link register
+ 	adrp	lr, EXT(arm_init)@page
+ 	add		lr, lr, EXT(arm_init)@pageoff
+-	add		lr, lr, x22							// Convert to KVA
 -	sub		lr, lr, x23
-+	/*
-+	 * SAGIT: no lr fixup. lr already holds a link (virtual) address; the
-+	 * upstream '+ virtBase - physBase' conversion is a no-op only when iBoot
-+	 * passes virtBase == physBase. This port links the kernel at a high VA
-+	 * and needs the two bases to differ, so the fixup would turn a valid VA
-+	 * into an unmapped one and control would never reach arm_vm_init.
-+	 */
++	/* SAGIT: no KVA fixup -- the value is already a virtual address;
++	 * the upstream +virtBase-physBase is a no-op only when iBoot
++	 * passes virtBase == physBase, which this port does not. */
  
- 	b		common_start
- 
-@@ -767,8 +771,7 @@
+ 	/*
+ 	 * Set up the bootstrap page tables with a single block entry for the V=P
+@@ -767,8 +770,9 @@
  #endif /* __ARM_KERNEL_PROTECT__ */
  	adrp	x0, EXT(ExceptionVectorsBase)@page			// Load exception vectors base address
  	add		x0, x0, EXT(ExceptionVectorsBase)@pageoff
 -	add		x0, x0, x22									// Convert exception vector address to KVA
 -	sub		x0, x0, x23
-+	/* SAGIT: same reasoning as the lr fixup above -- x0 is already a VA. */
++	/* SAGIT: no KVA fixup -- the value is already a virtual address;
++	 * the upstream +virtBase-physBase is a no-op only when iBoot
++	 * passes virtBase == physBase, which this port does not. */
  1:
  	MSR_VBAR_EL1_X0
  
+@@ -850,8 +854,9 @@
+ 	// Load VA of the trampoline
+ 	adrp	x0, arm_init_tramp@page
+ 	add		x0, x0, arm_init_tramp@pageoff
+-	add		x0, x0, x22
+-	sub		x0, x0, x23
++	/* SAGIT: no KVA fixup -- the value is already a virtual address;
++	 * the upstream +virtBase-physBase is a no-op only when iBoot
++	 * passes virtBase == physBase, which this port does not. */
+ 
+ 	// Branch to the trampoline
+ 	br		x0

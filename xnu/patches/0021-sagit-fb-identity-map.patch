@@ -1,7 +1,7 @@
 diff --git a/osfmk/arm64/start.s b/osfmk/arm64/start.s
 --- a/osfmk/arm64/start.s
 +++ b/osfmk/arm64/start.s
-@@ -630,18 +630,39 @@
+@@ -630,18 +630,26 @@
  
  #if defined(SAGIT)
  	/*
@@ -10,42 +10,28 @@ diff --git a/osfmk/arm64/start.s b/osfmk/arm64/start.s
 -	 * create_bootstrap_mapping would replace the RAM L2 table.
 -	 * SAGIT uses 16K pages and all bring-up RAM is below 4GB, so the first
 -	 * V=P L2 page is bootstrap_pagetables + 2*PGBYTES.
-+	 * Framebuffer alias in TTBR1 space.
++	 * Splash framebuffer, identity mapped through TTBR0.
 +	 *
-+	 * Once the MMU is on, the framebuffer's physical address (0x9d400000) is
-+	 * unreachable: TTBR0 is not usable at this stage and the RAM mapping starts
-+	 * at a higher base. Create a TTBR1 alias so bootstrap code and the early
-+	 * console can draw from the first instruction after SCTLR_EL1.
++	 * With 16K pages an L1 entry covers 64GB, so the framebuffer (0x9d400000)
++	 * and the RAM window (0x100000000) share L1 index 0. L2 slot 78 is free
++	 * because RAM begins at L2 slot 128, so the block can go straight into the
++	 * first V=P L2 table that create_bootstrap_mapping already allocated.
 +	 *
-+	 *   alias VA = virtBase + 0x10000000000  (16 L1 slots above RAM)
-+	 *   block    = 0x9c000000, 32MB aligned, covers the FB at 0x9d400000
-+	 *   FB VA    = alias + 0x1400000
-+	 *
-+	 * x3 = TTBR1 L1 table, x2 = bootstrap free-page pointer.
++	 * A 32MB block descriptor must have a 32MB-aligned PA field. The previous
++	 * revision kept 0x9d400000 here, which is not aligned and makes the entry
++	 * invalid -- that is why 0x9d400000 was never mapped. 0x9c000000 covers
++	 * 0x9c000000..0x9dffffff, which contains the framebuffer.
  	 */
--	MOV64	x10, 0x9d400000
-+	MOV64	x10, 0x10000000000
-+	add		x10, x22, x10
+ 	MOV64	x10, 0x9d400000
  	MOV64	x11, (ARM_TTE_TYPE_BLOCK | ARM_TTE_VALID | ARM_TTE_BLOCK_SH(SH_OUTER_MEMORY) | ARM_TTE_BLOCK_ATTRINDX(CACHE_ATTRINDX_WRITECOMB) | ARM_TTE_BLOCK_AF | ARM_TTE_BLOCK_PNX | ARM_TTE_BLOCK_NX)
 -	orr		x11, x11, x10
-+	MOV64	x14, 0x9c000000			/* 32MB-aligned block base */
++	MOV64	x14, 0xfffffe000000		/* 32MB block alignment mask */
++	and		x14, x10, x14
 +	orr		x11, x11, x14
-+
-+	add		x13, x2, #(PGBYTES)		/* one more bootstrap page */
-+	mov		x16, #(TTE_PGENTRIES)
-+	mov		x17, x13
-+1:	str		xzr, [x17], #8
-+	subs	x16, x16, #1
-+	b.ne	1b
-+
-+	orr		x17, x13, #(ARM_TTE_BOOT_TABLE)
-+	and		x12, x10, #(ARM_TT_L1_INDEX_MASK)
-+	lsr		x12, x12, #(ARM_TT_L1_SHIFT)
-+	str		x17, [x3, x12, lsl #TTE_SHIFT]
-+
  	and		x12, x10, #(ARM_TT_L2_INDEX_MASK)
  	lsr		x12, x12, #(ARM_TT_L2_SHIFT)
 -	add		x13, x25, #(2 * PGBYTES)
++	add		x13, x25, #(2 * PGBYTES)	/* first V=P L2 table (L1 index 0) */
  	str		x11, [x13, x12, lsl #TTE_SHIFT]
  #endif
  
