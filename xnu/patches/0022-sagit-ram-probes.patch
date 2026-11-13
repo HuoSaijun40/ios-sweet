@@ -1,0 +1,71 @@
+diff --git a/osfmk/arm64/arm_vm_init.c b/osfmk/arm64/arm_vm_init.c
+--- a/osfmk/arm64/arm_vm_init.c
++++ b/osfmk/arm64/arm_vm_init.c
+@@ -1852,8 +1852,26 @@
+ #endif
+ 
+ void
++#if defined(SAGIT)
++/*
++ * Persistent progress probe. Writes a small integer to a fixed physical page
++ * through the kernel KVA; the shim reads it back on the next boot (DRAM is not
++ * cleared by a warm reset). Lets us trace arm_vm_init without relying on the
++ * framebuffer, whose mapping has been unreliable.
++ */
++static inline void
++sagit_probe(uint32_t v)
++{
++	*(volatile uint32_t *)phystokv(0x1A0000008UL) = v;
++	__asm__ volatile("dsb sy" ::: "memory");
++}
++#endif /* SAGIT */
++
+ arm_vm_init(uint64_t memory_size, boot_args * args)
+ {
++#if defined(SAGIT)
++	sagit_probe(1);
++#endif
+ 	vm_map_address_t va_l1, va_l1_end;
+ 	tt_entry_t       *cpu_l1_tte;
+ 	vm_map_address_t va_l2, va_l2_end;
+@@ -2195,12 +2213,16 @@
+ 	set_mmu_ttb(invalid_ttep & TTBR_BADDR_MASK);
+ 
+ 	flush_mmu_tlb();
++	sagit_probe(10);
+ 	sagit_early_mark(10, "TTBR0 off; TLB flushed");
++	sagit_probe(110);
+ 	kva_active = TRUE;
+ 	// global table pointers may need to be different due to physical aperture remapping
+ 	cpu_tte = (tt_entry_t*)(phystokv(cpu_ttep));
+ 	invalid_tte = (tt_entry_t*)(phystokv(invalid_ttep));
++	sagit_probe(11);
+ 	sagit_early_mark(11, "physmap table pointers rebound");
++	sagit_probe(111);
+ 
+ 	// From here on out, we're off the bootstrap translation tables.
+ 
+@@ -2293,9 +2315,13 @@
+     }
+ #endif
+ #endif
++	sagit_probe(12);
+ 	sagit_early_mark(12, "calling pmap_bootstrap");
++	sagit_probe(112);
+ 	pmap_bootstrap(dynamic_memory_begin);
++	sagit_probe(13);
+ 	sagit_early_mark(13, "pmap_bootstrap done");
++	sagit_probe(113);
+ 
+ 	disable_preemption();
+ 
+@@ -2346,7 +2372,9 @@
+ 		va_l1 = va_l2_end;
+ 		cpu_l1_tte++;
+ 	}
++	sagit_probe(14);
+ 	sagit_early_mark(14, "early I/O page tables ready");
++	sagit_probe(114);
+ 
+ #if defined(KERNEL_INTEGRITY_KTRR) || defined(KERNEL_INTEGRITY_CTRR)
+ 	/*
