@@ -1,10 +1,10 @@
 diff --git a/osfmk/arm64/arm_vm_init.c b/osfmk/arm64/arm_vm_init.c
 --- a/osfmk/arm64/arm_vm_init.c
 +++ b/osfmk/arm64/arm_vm_init.c
-@@ -1852,8 +1852,26 @@
+@@ -1851,9 +1851,27 @@
+ }
  #endif
  
- void
 +#if defined(SAGIT)
 +/*
 + * Persistent progress probe. Writes a small integer to a fixed physical page
@@ -20,6 +20,7 @@ diff --git a/osfmk/arm64/arm_vm_init.c b/osfmk/arm64/arm_vm_init.c
 +}
 +#endif /* SAGIT */
 +
+ void
  arm_vm_init(uint64_t memory_size, boot_args * args)
  {
 +#if defined(SAGIT)
