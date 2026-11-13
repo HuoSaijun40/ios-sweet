@@ -1,0 +1,30 @@
+diff --git a/osfmk/arm64/start.s b/osfmk/arm64/start.s
+--- a/osfmk/arm64/start.s
++++ b/osfmk/arm64/start.s
+@@ -341,9 +341,13 @@
+ 	msr		SPSel, #0
+ 	mov		sp, x0
+ 
+-	// Convert lr to KVA
+-	add		lr, lr, x22
+-	sub		lr, lr, x23
++	/*
++	 * SAGIT: no lr fixup. lr already holds a link (virtual) address; the
++	 * upstream '+ virtBase - physBase' conversion is a no-op only when iBoot
++	 * passes virtBase == physBase. This port links the kernel at a high VA
++	 * and needs the two bases to differ, so the fixup would turn a valid VA
++	 * into an unmapped one and control would never reach arm_vm_init.
++	 */
+ 
+ 	b		common_start
+ 
+@@ -767,8 +771,7 @@
+ #endif /* __ARM_KERNEL_PROTECT__ */
+ 	adrp	x0, EXT(ExceptionVectorsBase)@page			// Load exception vectors base address
+ 	add		x0, x0, EXT(ExceptionVectorsBase)@pageoff
+-	add		x0, x0, x22									// Convert exception vector address to KVA
+-	sub		x0, x0, x23
++	/* SAGIT: same reasoning as the lr fixup above -- x0 is already a VA. */
+ 1:
+ 	MSR_VBAR_EL1_X0
+ 

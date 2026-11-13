@@ -1,26 +1,30 @@
 diff --git a/osfmk/arm64/start.s b/osfmk/arm64/start.s
 --- a/osfmk/arm64/start.s
 +++ b/osfmk/arm64/start.s
-@@ -781,6 +781,35 @@
+@@ -781,6 +781,39 @@
  	MSR_SCTLR_EL1_X0
  	isb		sy
  
 +#if defined(SAGIT)
 +	/*
-+	 * Stage 1: reached only if the MMU/cache enable above survived.
++	 * Stage 1: must NOT fault.
 +	 *
-+	 * Draws through the TTBR1 framebuffer alias that patch 0021 installs:
-+	 *   VA = virtBase + 0x10000000000 + 0x1400000 + 1840*4320
-+	 * A white band appears only if post-MMU framebuffer writes work, which
-+	 * also proves the bootstrap mapping and the alias are usable.
++	 * The framebuffer (0x9d400000) and other low physical addresses are not
++	 * reachable once the MMU is on -- TTBR0 is not set up for them here -- and
++	 * a fault goes through a VBAR that is itself invalid, so it leaves no
++	 * trace. That made every previous Stage-1 variant indistinguishable from
++	 * "the kernel died before it".
++	 *
++	 * Write into the KVA window instead: [virtBase, virtBase + memSize) is
++	 * mapped by create_bootstrap_mapping above (the kernel's own code runs
++	 * there), so this access is guaranteed to succeed. The signal we are
++	 * after is now simply whether execution continues to arm_vm_init and its
++	 * early console.
 +	 */
-+	MOV64	x9, 0x10000000000
++	MOV64	x9, 0xA0000000
 +	add	x0, x22, x9
-+	MOV64	x9, 0x1B94A00			/* 0x1400000 (FB in block) + row 1840 */
-+	add	x0, x0, x9
 +	mov	w1, #-1
-+	mov	x2, #32
-+	mov	x4, #4320
++	mov	x2, #8
 +Lsagit_mark2_row:
 +	mov	x3, #64
 +	mov	x5, x0
@@ -28,7 +32,7 @@ diff --git a/osfmk/arm64/start.s b/osfmk/arm64/start.s
 +	str	w1, [x5], #4
 +	subs	x3, x3, #1
 +	b.ne	Lsagit_mark2_pixel
-+	add	x0, x0, x4
++	add	x0, x0, #256
 +	subs	x2, x2, #1
 +	b.ne	Lsagit_mark2_row
 +	dsb	sy
