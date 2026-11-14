@@ -1,7 +1,7 @@
 diff --git a/osfmk/arm64/start.s b/osfmk/arm64/start.s
 --- a/osfmk/arm64/start.s
 +++ b/osfmk/arm64/start.s
-@@ -847,6 +847,87 @@
+@@ -847,6 +847,89 @@
  	ldp		x6, x7, [sp, #48]
  	add		sp, sp, #96
  #endif /* SAGIT */
@@ -10,20 +10,21 @@ diff --git a/osfmk/arm64/start.s b/osfmk/arm64/start.s
 +	/*
 +	 * SAGIT probe: what physical address does the framebuffer VA map to?
 +	 *
-+	 * AT performs the translation without faulting and leaves the result in
-+	 * PAR_EL1. We display bits [35:25] of the output address as eleven bars,
-+	 * bit 0 lowest, one bar per set bit, 16 rows apart from row 1790 upwards.
-+	 * For the intended mapping (PA 0x9c000000) the block index is 78, i.e.
-+	 * 0b0001001110, so bars appear for bits 1, 2, 3 and 6.
-+	 * A translation fault draws a thick bar at row 1600 instead.
++	 * AT translates without faulting and leaves the result in PAR_EL1. Bits
++	 * [35:25] of the output address are shown as eleven bars, bit 0 lowest,
++	 * one bar per set bit, 16 rows apart starting at row 1790. The intended
++	 * mapping (PA 0x9c000000) has block index 78 = 0b0001001110, so bars are
++	 * expected for bits 1, 2, 3 and 6. A translation fault draws a thick bar
++	 * at row 1600 instead.
 +	 */
-+	sub		sp, sp, #96
++	sub		sp, sp, #112
 +	stp		x0, x1, [sp]
 +	stp		x2, x3, [sp, #16]
 +	stp		x4, x5, [sp, #32]
 +	stp		x9, x10, [sp, #48]
 +	stp		x11, x12, [sp, #64]
-+
++	stp		x13, x14, [sp, #80]
++	mov		x4, #4320			/* row stride; too big for an add immediate */
 +	MOV64	x0, (0x9d400000 + 1840 * 4320)
 +	at		s1e1w, x0
 +	isb
@@ -33,7 +34,7 @@ diff --git a/osfmk/arm64/start.s b/osfmk/arm64/start.s
 +	MOV64	x2, 0xFFFFFFF000
 +	and		x9, x1, x2
 +	lsr		x9, x9, #25
-+	and		x9, x9, #0x7ff			/* block index of the output address */
++	and		x9, x9, #0x7ff
 +
 +	MOV64	x10, (0x9d400000 + 1790 * 4320)
 +	mov		x11, #11
@@ -50,7 +51,7 @@ diff --git a/osfmk/arm64/start.s b/osfmk/arm64/start.s
 +	str		w13, [x12], #4
 +	subs	x3, x3, #1
 +	b.ne	Lsagit_par_pix
-+	add		x5, x5, #4320
++	add		x5, x5, x4
 +	subs	x2, x2, #1
 +	b.ne	Lsagit_par_row
 +Lsagit_par_skip:
@@ -73,7 +74,7 @@ diff --git a/osfmk/arm64/start.s b/osfmk/arm64/start.s
 +	str		w13, [x12], #4
 +	subs	x3, x3, #1
 +	b.ne	Lsagit_par_fpix
-+	add		x5, x5, #4320
++	add		x5, x5, x4
 +	subs	x2, x2, #1
 +	b.ne	Lsagit_par_frow
 +
@@ -84,7 +85,8 @@ diff --git a/osfmk/arm64/start.s b/osfmk/arm64/start.s
 +	ldp		x4, x5, [sp, #32]
 +	ldp		x9, x10, [sp, #48]
 +	ldp		x11, x12, [sp, #64]
-+	add		sp, sp, #96
++	ldp		x13, x14, [sp, #80]
++	add		sp, sp, #112
 +#endif /* SAGIT */
  	MOV64   x0, SCTLR_EL1_DEFAULT
  	MSR_SCTLR_EL1_X0
