@@ -1,0 +1,132 @@
+diff --git a/osfmk/vm/vm_kern.c b/osfmk/vm/vm_kern.c
+--- a/osfmk/vm/vm_kern.c
++++ b/osfmk/vm/vm_kern.c
+@@ -3519,13 +3519,71 @@
+ 	       kmem_ptr_ranges;
+ }
+ 
++#if defined(SAGIT)
++static vm_map_size_t kmem_sagit_hole_size;
++static vm_map_offset_t kmem_sagit_hole_start;
++
++/*
++ * The 39-bit (4KB page) kernel map is small and pmap_bootstrap fills it with
++ * big static/physmap entries.  vm_map_sizes() computes each hole as
++ * `vme_start - prev`, which wraps to a garbage ~2^50 as soon as an entry is out
++ * of order or overlaps, and every kmem claim was then sized from that number
++ * (ptr=128TB, data=16EB on the phone).  Walk the entries monotonically and
++ * remember both the largest hole's size and where it starts, so the claims can
++ * be laid out contiguously inside it.
++ */
++static void
++kmem_sagit_find_largest_hole(void)
++{
++	vm_map_entry_t e;
++	vm_map_offset_t prev = kernel_map->min_offset;
++	vm_map_offset_t best_start = kernel_map->min_offset;
++	vm_map_size_t best = 0;
++#if DEVELOPMENT || DEBUG
++	int shown = 0;
++#endif
++
++	for (e = vm_map_first_entry(kernel_map); e != vm_map_to_entry(kernel_map); e = e->vme_next) {
++#if DEVELOPMENT || DEBUG
++		if (shown < 8) {
++			printf("SAGIT kmem entry %p-%p\n",
++			    (void *)e->vme_start, (void *)e->vme_end);
++			shown++;
++		}
++#endif
++		if (e->vme_end <= prev) {
++			continue;
++		}
++		if (e->vme_start > prev && (e->vme_start - prev) > best) {
++			best = e->vme_start - prev;
++			best_start = prev;
++		}
++		prev = e->vme_end;
++	}
++	if (kernel_map->max_offset > prev && (kernel_map->max_offset - prev) > best) {
++		best = kernel_map->max_offset - prev;
++		best_start = prev;
++	}
++	kmem_sagit_hole_size = trunc_page(best);
++	kmem_sagit_hole_start = best_start;
++#if DEVELOPMENT || DEBUG
++	printf("SAGIT kmem largest=%lluMB at=%p\n",
++	    (unsigned long long)(kmem_sagit_hole_size >> 20), (void *)best_start);
++#endif
++}
++#endif /* SAGIT */
++
+ __startup_func
+ static void
+ kmem_add_extra_claims(void)
+ {
+ 	vm_map_size_t largest_free_size = 0, total_claims = 0;
+ 
++#if defined(SAGIT)
++	largest_free_size = kmem_sagit_hole_size;
++#else
+ 	vm_map_sizes(kernel_map, NULL, NULL, &largest_free_size);
++#endif
+ 	largest_free_size = trunc_page(largest_free_size);
+ 
+ 	/*
+@@ -3541,6 +3599,32 @@
+ 	for (uint32_t i = 0; i < kmem_claim_count; i++) {
+ 		total_claims += kmem_claims[i].kc_size;
+ 	}
++#if defined(SAGIT)
++	/*
++	 * Apple sizes the registered claims (zone map, kext map, ...) for the 2TB
++	 * 16KB-page VA layout.  This map is 112GB with ~44GB free, so e.g. the
++	 * 128GB "zones" claim can never be placed; cap each claim at an eighth of
++	 * the free VA and keep the totals consistent.
++	 */
++	if (largest_free_size > 0) {
++		vm_map_size_t cap = trunc_page(largest_free_size / 8);
++		for (uint32_t i = 0; i < kmem_claim_count; i++) {
++			if (kmem_claims[i].kc_size > cap) {
++#if DEVELOPMENT || DEBUG
++				printf("SAGIT kmem: clamp claim %s %lluMB -> %lluMB\n",
++				    kmem_claims[i].kc_name,
++				    (unsigned long long)(kmem_claims[i].kc_size >> 20),
++				    (unsigned long long)(cap >> 20));
++#endif
++				kmem_claims[i].kc_size = cap;
++			}
++		}
++		total_claims = 0;
++		for (uint32_t i = 0; i < kmem_claim_count; i++) {
++			total_claims += kmem_claims[i].kc_size;
++		}
++	}
++#endif /* SAGIT */
+ 	assert((total_claims & PAGE_MASK) == 0);
+ 	largest_free_size -= total_claims;
+ 
+@@ -3619,7 +3703,12 @@
+ 	 * pointer packing schemes using KERNEL_PMAP_HEAP_RANGE_START as a base
+ 	 * do not admit this address to be part of any zone submap.
+ 	 */
++#if defined(SAGIT)
++	kmem_sagit_find_largest_hole();
++	start = kmem_sagit_hole_start;
++#else
+ 	start = kmem_fuzz_start();
++#endif
+ 
+ 	/*
+ 	 * Add claims for ptr and data kmem_ranges
+@@ -3639,6 +3728,10 @@
+ 		vm_map_offset_t end = 0;
+ 		struct kmem_range_startup_spec sp = kmem_claims[i];
+ 		struct mach_vm_range *sp_range = sp.kc_range;
++#if defined(SAGIT) && (DEVELOPMENT || DEBUG)
++		printf("SAGIT kmem claim %s size=%lluMB at=%p\n", sp.kc_name,
++		    (unsigned long long)(sp.kc_size >> 20), (void *)start);
++#endif
+ 		if (vm_map_locate_space(kernel_map, sp.kc_size, 0,
+ 		    VM_MAP_KERNEL_FLAGS_ANYWHERE(), &start, NULL) != KERN_SUCCESS) {
+ 			panic("kmem_range_init: vm_map_locate_space failing for claim %s",
