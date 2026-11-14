@@ -1,0 +1,47 @@
+diff --git a/iokit/Kernel/IOPlatformExpert.cpp b/iokit/Kernel/IOPlatformExpert.cpp
+--- a/iokit/Kernel/IOPlatformExpert.cpp
++++ b/iokit/Kernel/IOPlatformExpert.cpp
+@@ -2186,6 +2186,35 @@
+ 
+ 			data2 = OSDynamicCast( OSData, entry->getProperty( "chip-id" ));
+ 			if (data2 && data2->getLength() == 4) {
++#if defined(SAGIT)
++				/*
++				 * No corecrypto on this port: g_crypto_funcs (the table
++				 * register_crypto_functions() installs) stays NULL, so the
++				 * SHA1Init path below would fault at g_crypto_funcs->ccsha1_di.
++				 * A host UUID only has to be stable, so derive it from the same
++				 * chip-id bytes with a trivial mix.
++				 */
++				uint8_t      digest[16];
++				const uint8_t *uid = (const uint8_t *)data1->getBytesNoCopy();
++				const uint8_t *cid = (const uint8_t *)data2->getBytesNoCopy();
++
++				for (int i = 0; i < 8; i++) {
++					digest[i] = uid[i];
++				}
++				for (int i = 0; i < 4; i++) {
++					digest[8 + i] = cid[i] ^ uid[i];
++				}
++				digest[12] = 'S';
++				digest[13] = 'A';
++				digest[14] = 'G';
++				digest[15] = 'T';
++
++				digest[6] = (digest[6] & 0x0F) | 0x50;
++				digest[8] = (digest[8] & 0x3F) | 0x80;
++
++				uuid_unparse( digest, uuid );
++				string = OSString::withCString( uuid );
++#else
+ 				SHA1_CTX     context;
+ 				uint8_t      digest[SHA_DIGEST_LENGTH];
+ 				const uuid_t space = { 0xA6, 0xDD, 0x4C, 0xCB, 0xB5, 0xE8, 0x4A, 0xF5, 0xAC, 0xDD, 0xB6, 0xDC, 0x6A, 0x05, 0x42, 0xB8 };
+@@ -2201,6 +2230,7 @@
+ 
+ 				uuid_unparse( digest, uuid );
+ 				string = OSString::withCString( uuid );
++#endif /* SAGIT */
+ 			}
+ 		}
+ 
