@@ -1,0 +1,55 @@
+diff --git a/osfmk/vm/vm_kern.c b/osfmk/vm/vm_kern.c
+--- a/osfmk/vm/vm_kern.c
++++ b/osfmk/vm/vm_kern.c
+@@ -3525,7 +3525,51 @@
+ {
+ 	vm_map_size_t largest_free_size = 0, total_claims = 0;
+ 
++#if defined(SAGIT)
++	/*
++	 * The 39-bit kernel map is small and is populated by pmap_bootstrap with
++	 * huge physmap/static entries.  vm_map_sizes() computes each hole as
++	 * `entry->vme_start - prev`, so one unsorted or overlapping entry makes it
++	 * wrap to a garbage 2^50-sized "hole" and every kmem claim is then sized
++	 * from that (ptr=128TB, data=16EB on the phone).  Walk the entries
++	 * monotonically instead: only count a gap when the entry really starts
++	 * past the cursor, and advance the cursor with MAX().
++	 */
++	{
++		vm_map_entry_t e;
++		vm_map_offset_t prev = kernel_map->min_offset;
++		vm_map_offset_t best = 0;
++		int shown = 0;
++
++		for (e = vm_map_first_entry(kernel_map); e != vm_map_to_entry(kernel_map); e = e->vme_next) {
++#if DEVELOPMENT || DEBUG
++			if (shown < 8) {
++				printf("SAGIT kmem entry %p-%p\n",
++				    (void *)e->vme_start, (void *)e->vme_end);
++				shown++;
++			}
++#endif
++			if (e->vme_end <= prev) {
++				continue;
++			}
++			if (e->vme_start > prev && (e->vme_start - prev) > best) {
++				best = e->vme_start - prev;
++			}
++			prev = e->vme_end;
++		}
++		if (kernel_map->max_offset > prev && (kernel_map->max_offset - prev) > best) {
++			best = kernel_map->max_offset - prev;
++		}
++		largest_free_size = best;
++#if DEVELOPMENT || DEBUG
++		printf("SAGIT kmem largest=%lluMB min=%p max=%p\n",
++		    (unsigned long long)(largest_free_size >> 20),
++		    (void *)kernel_map->min_offset, (void *)kernel_map->max_offset);
++#endif
++	}
++#else
+ 	vm_map_sizes(kernel_map, NULL, NULL, &largest_free_size);
++#endif
+ 	largest_free_size = trunc_page(largest_free_size);
+ 
+ 	/*
