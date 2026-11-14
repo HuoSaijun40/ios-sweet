@@ -1,0 +1,47 @@
+diff --git a/osfmk/arm/pmap/pmap.c b/osfmk/arm/pmap/pmap.c
+--- a/osfmk/arm/pmap/pmap.c
++++ b/osfmk/arm/pmap/pmap.c
+@@ -10890,6 +10890,35 @@
+ 
+ 	vm_map_address_t commpage_text_va = 0;
+ 
++#if defined(SAGIT)
++	/*
++	 * 4KB port: do not trust a single random leaf index.  The v9 boot asserted
++	 * here (*ptep != ARM_TTE_EMPTY), so scan the data commpage's L3 for a free
++	 * slot instead, skipping the data and RO commpage pages.
++	 */
++	{
++		int i;
++		vm_map_address_t cand_base = (_COMM_PAGE64_BASE_ADDRESS & ~pt_attr_leaf_index_mask(pt_attr));
++
++		commpage_text_va = 0;
++		for (i = 0; i < num_ptes; i++) {
++			vm_map_address_t cand = cand_base | ((vm_map_address_t)i << pt_attr_leaf_shift(pt_attr));
++			pt_entry_t *ptep;
++
++			if (cand == _COMM_PAGE64_BASE_ADDRESS || cand == _COMM_PAGE64_RO_ADDRESS) {
++				continue;
++			}
++			ptep = pmap_pte(commpage_pmap_default, cand);
++			if (ptep != PT_ENTRY_NULL && *ptep == ARM_TTE_EMPTY) {
++				commpage_text_va = cand;
++				break;
++			}
++		}
++		if (commpage_text_va == 0) {
++			panic("SAGIT commpage: no empty leaf in the data commpage L3 (num_ptes=%d)", num_ptes);
++		}
++	}
++#else
+ 	do {
+ 		int text_leaf_index = random() % num_ptes;
+ 
+@@ -10903,6 +10932,7 @@
+ 	__assert_only pt_entry_t *ptep = pmap_pte(commpage_pmap_default, commpage_text_va);
+ 	assert(ptep != PT_ENTRY_NULL);
+ 	assert(*ptep == ARM_TTE_EMPTY);
++#endif /* SAGIT */
+ 
+ 	// At this point, we've found the address we want to insert our comm page at
+ 	kr = pmap_enter_addr(commpage_pmap_default, commpage_text_va, text_pa, VM_PROT_READ | VM_PROT_EXECUTE, VM_PROT_NONE, VM_WIMG_USE_DEFAULT, TRUE);
