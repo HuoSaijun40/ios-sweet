@@ -1,0 +1,93 @@
+diff --git a/osfmk/arm64/start.s b/osfmk/arm64/start.s
+--- a/osfmk/arm64/start.s
++++ b/osfmk/arm64/start.s
+@@ -930,6 +930,89 @@
+ 	ldp		x13, x14, [sp, #80]
+ 	add		sp, sp, #112
+ #endif /* SAGIT */
++
++#if defined(SAGIT)
++	/*
++	 * SAGIT probe: does the kernel's own VA (TTBR1) translate?
++	 *
++	 * We ask AT about the address of this very code. If it faults, the KVA
++	 * mapping or TCR/TTBR1 is wrong, which would kill the machine at the
++	 * first instruction fetch after the MMU is enabled -- exactly the symptom
++	 * we cannot otherwise see.
++	 *
++	 * Bars from row 1540 upward: bit 0 lowest, one bar per set bit, 16 rows
++	 * apart. A thick bar at row 1320 means the translation faults.
++	 */
++	stp		x0, x1, [sp, #-16]!
++	stp		x2, x3, [sp, #-16]!
++	stp		x4, x5, [sp, #-16]!
++	stp		x9, x10, [sp, #-16]!
++	stp		x11, x12, [sp, #-16]!
++	stp		x13, x14, [sp, #-16]!
++	mov		x4, #4320
++Lsagit_t1_here:
++	adr		x0, Lsagit_t1_here
++	at		s1e1r, x0
++	isb
++	mrs		x1, par_el1
++	tbnz	x1, #0, Lsagit_t1_fault
++
++	MOV64	x2, 0xFFFFFFF000
++	and		x9, x1, x2
++	lsr		x9, x9, #25
++	and		x9, x9, #0x7ff
++
++	MOV64	x10, (0x9d400000 + 1540 * 4320)
++	mov		x11, #11
++Lsagit_t1_bit:
++	tst		x9, #1
++	b.eq	Lsagit_t1_skip
++	mov		x2, #8
++	mov		x5, x10
++Lsagit_t1_row:
++	mov		x3, #64
++	mov		x12, x5
++	mov		w13, #-1
++Lsagit_t1_pix:
++	str		w13, [x12], #4
++	subs	x3, x3, #1
++	b.ne	Lsagit_t1_pix
++	add		x5, x5, x4
++	subs	x2, x2, #1
++	b.ne	Lsagit_t1_row
++Lsagit_t1_skip:
++	MOV64	x2, (16 * 4320)
++	sub		x10, x10, x2
++	lsr		x9, x9, #1
++	subs	x11, x11, #1
++	b.ne	Lsagit_t1_bit
++	b		Lsagit_t1_done
++
++Lsagit_t1_fault:
++	MOV64	x10, (0x9d400000 + 1320 * 4320)
++	mov		x2, #24
++	mov		x5, x10
++Lsagit_t1_frow:
++	mov		x3, #64
++	mov		x12, x5
++	mov		w13, #-1
++Lsagit_t1_fpix:
++	str		w13, [x12], #4
++	subs	x3, x3, #1
++	b.ne	Lsagit_t1_fpix
++	add		x5, x5, x4
++	subs	x2, x2, #1
++	b.ne	Lsagit_t1_frow
++
++Lsagit_t1_done:
++	dsb		sy
++	ldp		x13, x14, [sp], #16
++	ldp		x11, x12, [sp], #16
++	ldp		x9, x10, [sp], #16
++	ldp		x4, x5, [sp], #16
++	ldp		x2, x3, [sp], #16
++	ldp		x0, x1, [sp], #16
++#endif /* SAGIT */
+ 	MOV64   x0, SCTLR_EL1_DEFAULT
+ 	MSR_SCTLR_EL1_X0
+ 	isb		sy
