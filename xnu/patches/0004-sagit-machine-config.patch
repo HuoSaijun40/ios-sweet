@@ -11,11 +11,17 @@ index 8460893..9a748ea 100644
  
  endif
  
-@@ -61,6 +61,7 @@ MACHINE_FLAGS_ARM64_T8103 = -DARM64_BOARD_CONFIG_T8103                  -mcpu=ap
+@@ -61,6 +61,13 @@ MACHINE_FLAGS_ARM64_T8103 = -DARM64_BOARD_CONFIG_T8103                  -mcpu=ap
  MACHINE_FLAGS_ARM64_T6000 = -DARM64_BOARD_CONFIG_T6000 		-mcpu=apple-a14
  MACHINE_FLAGS_ARM64_VMAPPLE = -DARM64_BOARD_CONFIG_VMAPPLE              -march=armv8.5a
  MACHINE_FLAGS_ARM64_BCM2837 = -DARM64_BOARD_CONFIG_BCM2837
-+MACHINE_FLAGS_ARM64_SAGIT = -DARM64_BOARD_CONFIG_SAGIT                -march=armv8-a+crypto
++#
++# sagit's Kryo 280 is ARMv8.0 + crypto: no LSE atomics, no RCpc, no dotprod.
++# -march= is ignored for Darwin targets, and the default CPU (apple-m1) enables
++# all of those, which produced 2253 LDADD/LDEOR/... instructions and an
++# "Undefined kernel instruction" panic on the phone. -mcpu=generic+crypto pins
++# the feature set to exactly what the SoC has.
++MACHINE_FLAGS_ARM64_SAGIT = -DARM64_BOARD_CONFIG_SAGIT                -mcpu=generic+crypto
  
  
  #
