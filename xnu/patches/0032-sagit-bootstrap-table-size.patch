@@ -1,0 +1,20 @@
+diff --git a/osfmk/arm/pmap/pmap.h b/osfmk/arm/pmap/pmap.h
+--- a/osfmk/arm/pmap/pmap.h
++++ b/osfmk/arm/pmap/pmap.h
+@@ -105,10 +105,15 @@
+ 
+ #if defined(__arm64__)
+ 
+-#if defined(ARM_LARGE_MEMORY)
++#if defined(ARM_LARGE_MEMORY) || defined(ARM64_BOARD_CONFIG_SAGIT)
+ /*
+  * 2 L1 tables (Linear KVA and V=P), plus 2*16 L2 tables map up to (16*64GB) 1TB of DRAM
+  * Upper limit on how many pages can be consumed by bootstrap page tables
++ *
++ * SAGIT runs the 4KB layout without ARM_LARGE_MEMORY but manages 2.96GB:
++ * arm_vm_init's DEVELOPMENT sanity check needs 2 * (l1_entries + 1) = 12 pages
++ * (1GB per L1 entry), so the 4KB default of 8 (sized for ~1GB, BCM2837) is
++ * not enough.
+  */
+ #define BOOTSTRAP_TABLE_SIZE (ARM_PGBYTES * 34)
+ #else /* defined(ARM_LARGE_MEMORY) */
