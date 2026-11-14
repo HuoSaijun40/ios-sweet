@@ -97,10 +97,12 @@ jobs:
           sed -i '' 's/ARCHS="x86_64 arm64e" VALID_ARCHS="x86_64 arm64e"/ARCHS="x86_64 arm64e arm64" VALID_ARCHS="x86_64 arm64e arm64"/' dxb/build.sh
           grep -c 'VALID_ARCHS="x86_64 arm64e arm64"' dxb/build.sh
           # ...and it is compiled by xcodebuild with the default Darwin CPU (apple-m1),
-          # which emits ARMv8.1 LSE atomics. Kryo 280 has no LSE, so build the arm64
-          # slice that the kernel links with an ARMv8.0 CPU model instead.
-          sed -i '' 's|-target libfirehose_kernel -sdk macosx ARCHS="x86_64 arm64e arm64" VALID_ARCHS="x86_64 arm64e arm64"|-target libfirehose_kernel -sdk macosx ARCHS="arm64" VALID_ARCHS="arm64" OTHER_CFLAGS="-mcpu=generic+crypto" OTHER_CPLUSPLUSFLAGS="-mcpu=generic+crypto"|' dxb/build.sh
-          grep -c 'OTHER_CFLAGS="-mcpu=generic+crypto"' dxb/build.sh
+          # which emits ARMv8.1 LSE atomics.  Kryo 280 has no LSE, so the arm64 slice the
+          # kernel links must be built for an ARMv8.0 CPU.  Pass the flag through
+          # WARNING_CFLAGS ("Other Warning Flags"), NOT OTHER_CFLAGS: the project's own
+          # OTHER_CFLAGS carry its -std / include setup and must not be replaced.
+          sed -i '' 's|-target libfirehose_kernel -sdk macosx ARCHS="x86_64 arm64e arm64" VALID_ARCHS="x86_64 arm64e arm64"|-target libfirehose_kernel -sdk macosx ARCHS="arm64" VALID_ARCHS="arm64" WARNING_CFLAGS="-mcpu=generic+crypto"|' dxb/build.sh
+          grep -c 'WARNING_CFLAGS="-mcpu=generic+crypto"' dxb/build.sh
           ls dxb/patches
 
       - name: Deps
