@@ -73,40 +73,25 @@ diff --git a/osfmk/vm/vm_kern.c b/osfmk/vm/vm_kern.c
  	largest_free_size = trunc_page(largest_free_size);
  
  	/*
-@@ -3541,6 +3599,32 @@
+@@ -3541,6 +3599,17 @@
  	for (uint32_t i = 0; i < kmem_claim_count; i++) {
  		total_claims += kmem_claims[i].kc_size;
  	}
-+#if defined(SAGIT)
-+	/*
-+	 * Apple sizes the registered claims (zone map, kext map, ...) for the 2TB
-+	 * 16KB-page VA layout.  This map is 112GB with ~44GB free, so e.g. the
-+	 * 128GB "zones" claim can never be placed; cap each claim at an eighth of
-+	 * the free VA and keep the totals consistent.
-+	 */
-+	if (largest_free_size > 0) {
-+		vm_map_size_t cap = trunc_page(largest_free_size / 8);
-+		for (uint32_t i = 0; i < kmem_claim_count; i++) {
-+			if (kmem_claims[i].kc_size > cap) {
-+#if DEVELOPMENT || DEBUG
-+				printf("SAGIT kmem: clamp claim %s %lluMB -> %lluMB\n",
-+				    kmem_claims[i].kc_name,
-+				    (unsigned long long)(kmem_claims[i].kc_size >> 20),
-+				    (unsigned long long)(cap >> 20));
-+#endif
-+				kmem_claims[i].kc_size = cap;
-+			}
-+		}
-+		total_claims = 0;
-+		for (uint32_t i = 0; i < kmem_claim_count; i++) {
-+			total_claims += kmem_claims[i].kc_size;
++#if defined(SAGIT) && (DEVELOPMENT || DEBUG)
++	/* A claim bigger than the whole free hole can never be placed: say so. */
++	for (uint32_t i = 0; i < kmem_claim_count; i++) {
++		if (kmem_claims[i].kc_size > largest_free_size) {
++			printf("SAGIT kmem: claim %s is %lluMB but only %lluMB is free\n",
++			    kmem_claims[i].kc_name,
++			    (unsigned long long)(kmem_claims[i].kc_size >> 20),
++			    (unsigned long long)(largest_free_size >> 20));
 +		}
 +	}
-+#endif /* SAGIT */
++#endif
  	assert((total_claims & PAGE_MASK) == 0);
  	largest_free_size -= total_claims;
  
-@@ -3619,7 +3703,12 @@
+@@ -3619,7 +3688,12 @@
  	 * pointer packing schemes using KERNEL_PMAP_HEAP_RANGE_START as a base
  	 * do not admit this address to be part of any zone submap.
  	 */
@@ -119,7 +104,7 @@ diff --git a/osfmk/vm/vm_kern.c b/osfmk/vm/vm_kern.c
  
  	/*
  	 * Add claims for ptr and data kmem_ranges
-@@ -3639,6 +3728,10 @@
+@@ -3639,6 +3713,10 @@
  		vm_map_offset_t end = 0;
  		struct kmem_range_startup_spec sp = kmem_claims[i];
  		struct mach_vm_range *sp_range = sp.kc_range;
