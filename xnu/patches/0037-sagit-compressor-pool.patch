@@ -1,0 +1,24 @@
+diff --git a/osfmk/vm/vm_compressor.c b/osfmk/vm/vm_compressor.c
+--- a/osfmk/vm/vm_compressor.c
++++ b/osfmk/vm/vm_compressor.c
+@@ -838,6 +838,20 @@
+ 		compressor_pool_multiplier = 4;
+ 	}
+ 
++#if defined(SAGIT)
++	/*
++	 * SAGIT keeps the macOS kernel config but runs the 39-bit (4KB page) kernel
++	 * VA layout: 16x RAM would be 47GB of compressor VA, more than the ~44GB the
++	 * map has free, so the "compressor" kmem claim cannot be placed.  Size the
++	 * pool at 2x RAM and keep the multiplier at 1 so the segment limits stay
++	 * consistent with the pool.
++	 */
++	if (compressor_pool_size > (2ULL * max_mem)) {
++		compressor_pool_size = 2ULL * max_mem;
++	}
++	compressor_pool_multiplier = 1;
++#endif /* SAGIT */
++
+ #elif defined(__arm64__) && defined(XNU_TARGET_OS_WATCH)
+ 
+ 	/*
