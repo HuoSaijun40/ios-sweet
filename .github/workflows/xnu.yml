@@ -157,15 +157,15 @@ jobs:
             if grep -qE 'XNU Build Done' "$LOG"; then echo "RESULT: SUCCESS"; else echo "RESULT: FAILURE"; fi
             echo
             echo "## error index"
-            IDX=$(grep -nE 'error:|fatal error|Error [0-9]+|\*\*\* \[|undefined (symbol|reference)|static assertion|Unsupported' "$LOG" | head -40 || true)
+            IDX=$(grep -nE 'error:|fatal error|Error [0-9]+|\*\*\* \[|undefined (symbol|reference)|static assertion|Unsupported|No space left|Killed' "$LOG" | head -80 || true)
             if [ -n "$IDX" ]; then echo "$IDX"; else echo "(no error-like lines in the build output)"; fi
             echo
             echo "## error context (first few, with source lines)"
             grep -B6 -A12 -m6 -E 'error:|fatal error|\*\*\* \[|undefined (symbol|reference)|static assertion|Unsupported' "$LOG" \
               | head -200 || true
             echo
-            echo "## last 20 lines"
-            tail -20 "$LOG"
+            echo "## last 200 lines"
+            tail -200 "$LOG"
           } > "$DIAG"
           echo "diagnostics: $(wc -l < "$DIAG") lines, $(wc -c < "$DIAG") bytes"
           cat "$DIAG"
