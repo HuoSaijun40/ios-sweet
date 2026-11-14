@@ -1,0 +1,55 @@
+diff --git a/osfmk/arm64/start.s b/osfmk/arm64/start.s
+--- a/osfmk/arm64/start.s
++++ b/osfmk/arm64/start.s
+@@ -847,6 +847,51 @@
+ 	ldp		x6, x7, [sp, #48]
+ 	add		sp, sp, #96
+ #endif /* SAGIT */
++
++#if defined(SAGIT)
++	/*
++	 * SAGIT probe: does the framebuffer VA translate?
++	 *
++	 * AT writes its verdict to PAR_EL1 and never faults, so we can ask this
++	 * before the MMU is on and draw the answer with a physical address.
++	 *
++	 *   row 1824 -> translation OK    (0021's mapping is in effect)
++	 *   row 1848 -> translation fault (mapping missing or malformed)
++	 */
++	sub		sp, sp, #96
++	stp		x0, x1, [sp]
++	stp		x2, x3, [sp, #16]
++	stp		x4, x5, [sp, #32]
++	stp		x9, x10, [sp, #48]
++	MOV64	x0, (0x9d400000 + 1840 * 4320)
++	at		s1e1w, x0
++	isb
++	mrs		x1, par_el1
++	and		x1, x1, #1
++	MOV64	x9, (0x9d400000 + 1824 * 4320)	/* translation OK */
++	MOV64	x10, (0x9d400000 + 1848 * 4320)	/* translation fault */
++	cmp		x1, #0
++	csel	x0, x9, x10, eq
++	mov		w1, #-1
++	mov		x2, #8
++	mov		x4, #4320
++Lsagit_atprobe_row:
++	mov		x3, #64
++	mov		x5, x0
++Lsagit_atprobe_pix:
++	str		w1, [x5], #4
++	subs	x3, x3, #1
++	b.ne	Lsagit_atprobe_pix
++	add		x0, x0, x4
++	subs	x2, x2, #1
++	b.ne	Lsagit_atprobe_row
++	dsb		sy
++	ldp		x0, x1, [sp]
++	ldp		x2, x3, [sp, #16]
++	ldp		x4, x5, [sp, #32]
++	ldp		x9, x10, [sp, #48]
++	add		sp, sp, #96
++#endif /* SAGIT */
+ 	MOV64   x0, SCTLR_EL1_DEFAULT
+ 	MSR_SCTLR_EL1_X0
+ 	isb		sy
