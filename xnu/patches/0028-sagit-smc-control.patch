@@ -1,0 +1,26 @@
+diff --git a/osfmk/arm64/start.s b/osfmk/arm64/start.s
+--- a/osfmk/arm64/start.s
++++ b/osfmk/arm64/start.s
+@@ -1021,6 +1021,22 @@
+ 	msr		vbar_el1, x0
+ 	isb
+ #endif
++
++#if defined(SAGIT)
++	/*
++	 * SAGIT control: can EL1 invoke PSCI SYSTEM_RESET on this device?
++	 *
++	 * This runs before the MMU is enabled, so nothing about page tables can
++	 * interfere. If the phone reboots here, SMC works and the earlier silent
++	 * hang means either no exception happened or the vectors were not
++	 * reachable; if it does not, PSCI cannot be used as a signal at all.
++	 */
++	mov		x0, #0x9			/* PSCI SYSTEM_RESET */
++	movk	x0, #0x8400, lsl #16
++	smc		#0
++Lsagit_smc_control_hang:
++	b		.
++#endif
+ 	MOV64   x0, SCTLR_EL1_DEFAULT
+ 	MSR_SCTLR_EL1_X0
+ 	isb		sy
