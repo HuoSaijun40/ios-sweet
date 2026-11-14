@@ -1,0 +1,75 @@
+diff --git a/osfmk/arm64/start.s b/osfmk/arm64/start.s
+--- a/osfmk/arm64/start.s
++++ b/osfmk/arm64/start.s
+@@ -1013,6 +1013,14 @@
+ 	ldp		x2, x3, [sp], #16
+ 	ldp		x0, x1, [sp], #16
+ #endif /* SAGIT */
++
++#if defined(SAGIT)
++	/* Install the diagnostic vectors just before the MMU goes on. */
++	adrp	x0, Lsagit_vectors@page
++	add		x0, x0, Lsagit_vectors@pageoff
++	msr		vbar_el1, x0
++	isb
++#endif
+ 	MOV64   x0, SCTLR_EL1_DEFAULT
+ 	MSR_SCTLR_EL1_X0
+ 	isb		sy
+@@ -1168,3 +1176,56 @@
+ //#include	"globals_asm.h"
+ 
+ /* vim: set ts=4: */
++
++#if defined(SAGIT)
++	/*
++	 * SAGIT diagnostic exception vectors.
++	 *
++	 * Installed immediately before the MMU is enabled. Any fault after that
++	 * point lands here, where ESR_EL1.EC is drawn as six bars (bit 0 lowest,
++	 * 16 rows apart from row 1250) and the CPU then spins, leaving the picture
++	 * on screen. The framebuffer VA used here is the one patch 0021 installs
++	 * and 0025 verifies, so drawing is safe for fetch/SError faults; a data
++	 * abort on this very store would re-enter and spin without drawing.
++	 */
++	.align 11
++Lsagit_vectors:
++	.rept	16
++	b		Lsagit_fault
++	.balign	128
++	.endr
++
++Lsagit_fault:
++	mrs		x9, esr_el1
++	lsr		x9, x9, #26
++	and		x9, x9, #0x3f
++	MOV64	x13, (0x9d400000 + 1250 * 4320)
++	mov		x14, #6
++Lsagit_fault_bit:
++	tst		x9, #1
++	b.eq	Lsagit_fault_skip
++	mov		x2, #8
++	mov		x5, x13
++Lsagit_fault_row:
++	mov		x3, #64
++	mov		x12, x5
++	mov		w15, #-1
++Lsagit_fault_pix:
++	str		w15, [x12], #4
++	subs	x3, x3, #1
++	b.ne	Lsagit_fault_pix
++	add		x5, x5, #2048
++	add		x5, x5, #2048
++	add		x5, x5, #224
++	subs	x2, x2, #1
++	b.ne	Lsagit_fault_row
++Lsagit_fault_skip:
++	MOV64	x2, (16 * 4320)
++	sub		x13, x13, x2
++	lsr		x9, x9, #1
++	subs	x14, x14, #1
++	b.ne	Lsagit_fault_bit
++	dsb		sy
++Lsagit_fault_hang:
++	b		.
++#endif /* SAGIT */
